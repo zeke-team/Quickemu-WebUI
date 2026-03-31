@@ -58,6 +58,8 @@ class QEMURunner:
             -enable-kvm                — Use KVM for hardware acceleration
             -daemonize                — Run in background (required for PID tracking)
         """
+        is_macos = self.config.get("os_category") == "macos"
+
         args = [
             self.qemu_bin,
             "-name", self.name,
@@ -80,26 +82,76 @@ class QEMURunner:
             "-daemonize",
         ]
 
-        # Boot media: ISO or disk
-        iso = self.config.get("iso")
-        if iso:
-            args += ["-cdrom", iso]
+        # ── macOS-specific configuration ──────────────────────────────────
+        # macOS VMs require: UEFI firmware, OpenCore bootloader, AHCI disk bus,
+        # nec-usb-xhci controller, and virtio-gpu-pci display.
+        if is_macos:
+            efi_code = self.config.get("efi_code")
+            efi_vars = self.config.get("efi_vars")
+            if efi_code and efi_vars:
+                import shutil as _shutil
+                vm_efi_vars = VM_DIR / f"{self.name}-ovmf-vars.fd"
+                if not vm_efi_vars.exists():
+                    _shutil.copy(efi_vars, vm_efi_vars)
+                args += [
+                    "-global", "driver=cfi.pflash01,property=secure,value=on",
+                    "-drive", f"if=pflash,format=raw,unit=0,file={efi_code},readonly=on",
+                    "-drive", f"if=pflash,format=raw,unit=1,file={vm_efi_vars}",
+                ]
+            # AHCI controller for up to 6 SATA ports
+            args += ["-device", "ahci,id=ahci"]
 
-        disk = self.config.get("disk")
-        if disk:
+            # Bootloader: OpenCore on AHCI port 0 (bootindex=0)
+            bootloader = self.config.get("bootloader")
+            if bootloader:
+                args += [
+                    "-device", "ide-hd,bus=ahci.0,drive=BootLoader,bootindex=0",
+                    "-drive", f"id=BootLoader,if=none,format=qcow2,file={bootloader}",
+                ]
+
+            # Recovery Image on AHCI port 1
+            recovery_img = self.config.get("recovery_image")
+            if recovery_img:
+                args += [
+                    "-device", "ide-hd,bus=ahci.1,drive=RecoveryImage",
+                    "-drive", f"id=RecoveryImage,if=none,format=raw,file={recovery_img}",
+                ]
+
+            # System disk on AHCI port 2
+            disk = self.config.get("disk")
+            if disk:
+                args += [
+                    "-device", "ide-hd,bus=ahci.2,drive=SystemDisk",
+                    "-drive", f"id=SystemDisk,if=none,format=qcow2,file={disk},cache=writeback",
+                ]
+
+            # USB 3.0 controller (required for macOS input devices)
             args += [
-                "-drive",
-                f"file={disk},format=qcow2,cache=writeback"
+                "-device", "nec-usb-xhci,id=xhci",
+                "-global", "nec-usb-xhci.msi=off",
             ]
 
-        # Boot device order
-        boot_dev = self.config.get("boot", "cd")
-        if boot_dev == "cd" and iso:
-            args += ["-boot", "d"]      # Boot from CD first
-        elif boot_dev == "disk" and disk:
-            args += ["-boot", "c"]      # Boot from disk first
+        else:
+            # ── Standard (non-macOS) configuration ──────────────────────────
+            iso = self.config.get("iso")
+            if iso:
+                args += ["-cdrom", iso]
 
-        # Extra QEMU arguments from config (rarely needed)
+            disk = self.config.get("disk")
+            if disk:
+                args += [
+                    "-drive",
+                    f"file={disk},format=qcow2,cache=writeback"
+                ]
+
+            # Boot device order
+            boot_dev = self.config.get("boot", "cd")
+            if boot_dev == "cd" and iso:
+                args += ["-boot", "d"]
+            elif boot_dev == "disk" and disk:
+                args += ["-boot", "c"]
+
+        # Extra QEMU arguments from config
         extra = self.config.get("extra_args", "")
         if extra:
             args += extra.split()
