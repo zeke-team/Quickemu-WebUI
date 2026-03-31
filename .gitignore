@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+.venv/
+venv/
+*.qcow2
+*.img
+*.pid
+*-qmp.sock
+*.sock
+*.spice
+*.ports
+*.log
+.DS_Store

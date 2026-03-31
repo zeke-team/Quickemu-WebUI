@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Create VM — WebVM{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Create New VM</h1>
+</div>
+
+<form id="create-form" class="form-card">
+    <div class="form-group">
+        <label for="name">VM Name *</label>
+        <input type="text" id="name" name="name" required placeholder="e.g. my-ubuntu">
+    </div>
+
+    <div class="form-group">
+        <label for="os_type">OS Type *</label>
+        <select id="os_type" name="os_type" required>
+            <option value="linux">Linux</option>
+            <option value="windows">Windows</option>
+            <option value="macos">macOS</option>
+            <option value="other">Other</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="iso">ISO File</label>
+        <input type="text" id="iso" name="iso" placeholder="/path/to/install.iso">
+        <small>Or leave blank to boot from disk</small>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="ram">RAM (MB)</label>
+            <input type="number" id="ram" name="ram" value="4096" min="256">
+        </div>
+        <div class="form-group">
+            <label for="vcpu">vCPUs</label>
+            <input type="number" id="vcpu" name="vcpu" value="2" min="1" max="32">
+        </div>
+        <div class="form-group">
+            <label for="disk_size">Disk Size</label>
+            <input type="text" id="disk_size" name="disk_size" value="64G" placeholder="64G">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="boot">Boot Device</label>
+        <select id="boot" name="boot">
+            <option value="cd">CD / ISO</option>
+            <option value="disk">Disk</option>
+        </select>
+    </div>
+
+    <div id="error-msg" class="error-msg hidden"></div>
+    <div id="success-msg" class="success-msg hidden"></div>
+
+    <div class="form-actions">
+        <a href="/" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create VM</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("create-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = {
+        name: form.name.value,
+        os_type: form.os_type.value,
+        iso: form.iso.value,
+        ram: form.ram.value,
+        vcpu: form.vcpu.value,
+        disk_size: form.disk_size.value,
+        boot: form.boot.value,
+    };
+
+    const errEl = document.getElementById("error-msg");
+    const sucEl = document.getElementById("success-msg");
+    errEl.classList.add("hidden");
+    sucEl.classList.add("hidden");
+
+    try {
+        const res = await fetch("/api/vm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "Failed to create VM");
+        sucEl.textContent = `VM '${result.name}' created successfully!`;
+        sucEl.classList.remove("hidden");
+        setTimeout(() => window.location.href = "/", 1500);
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove("hidden");
+    }
+});
+</script>
+{% endblock %}

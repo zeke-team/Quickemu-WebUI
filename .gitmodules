@@ -1,0 +1,3 @@
+[submodule "web/static/js/novnc"]
+	path = web/static/js/novnc
+	url = https://github.com/novnc/noVNC

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ vm.name }} — WebVM{% endblock %}
+{% block content %}
+<div class="vm-header">
+    <div class="vm-info">
+        <h1>{{ vm.name }}</h1>
+        <span class="status-badge status-{{ vm.status }}">{{ vm.status }}</span>
+        <span class="vm-meta">{{ vm.os_type }} · {{ vm.ram }}MB RAM · {{ vm.vcpu }} vCPU</span>
+    </div>
+    <div class="vm-controls">
+        {% if vm.status == "stopped" %}
+        <button id="btn-start" class="btn btn-success" onclick="action('start')">Start</button>
+        {% else %}
+        <button id="btn-stop" class="btn btn-danger" onclick="action('stop')">Stop</button>
+        <button id="btn-reboot" class="btn btn-secondary" onclick="action('reboot')">Reboot</button>
+        {% endif %}
+        <button id="btn-delete" class="btn btn-danger-outline" onclick="deleteVm()">Delete</button>
+        <a href="/" class="btn btn-secondary">Back</a>
+    </div>
+</div>
+
+<div id="vnc-container" class="vnc-container">
+    {% if vm.status == "running" %}
+    <!-- noVNC will be embedded here -->
+    <div id="vnc-screen">
+        <div id="noVNC-screen" class="noVNC-screen">
+            <canvas id="noVNC_canvas" width="800" height="600"></canvas>
+        </div>
+    </div>
+    {% else %}
+    <div class="vnc-placeholder">
+        <p>VM is stopped. Start it to see the screen.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="vm-details">
+    <h3>Configuration</h3>
+    <dl class="config-list">
+        <dt>Name</dt><dd>{{ vm.name }}</dd>
+        <dt>OS Type</dt><dd>{{ vm.os_type }}</dd>
+        <dt>RAM</dt><dd>{{ vm.ram }} MB</dd>
+        <dt>vCPUs</dt><dd>{{ vm.vcpu }}</dd>
+        <dt>Disk</dt><dd>{{ vm.disk }}</dd>
+        <dt>Disk Size</dt><dd>{{ vm.disk_size }}</dd>
+        <dt>VNC Port</dt><dd>{{ vm.vnc_port }}</dd>
+        <dt>Boot</dt><dd>{{ vm.boot }}</dd>
+    </dl>
+</div>
+
+<!-- noVNC -->
+<script type="module">
+    import RFB from "{{ url_for('static', filename='js/novnc/core/rfb.js') }}";
+
+    const vmName = {{ vm.name | tojson }};
+    const vncPort = {{ vm.vnc_port }};
+    const wsUrl = `ws://${window.location.hostname}:${vncPort}`;
+
+    const canvas = document.getElementById('noVNC_canvas');
+    let rfb;
+
+    function connect() {
+        rfb = new RFB(canvas, wsUrl, { credentials: { password: '' } });
+        rfb.addEventListener("connect", () => console.log("VNC connected"));
+        rfb.addEventListener("disconnect", () => console.log("VNC disconnected"));
+    }
+
+    if ({{ vm.status == "running" | tojson }}) {
+        connect();
+    }
+
+    window.addEventListener("beforeunload", () => { if (rfb) rfb.disconnect(); });
+
+    // Expose action for control buttons
+    window.performAction = async (action) => {
+        const res = await fetch(`/api/vm/${vmName}/${action}`, { method: "POST" });
+        if (res.ok) location.reload();
+    };
+</script>
+
+<script>
+    async function action(act) {
+        await window.performAction(act);
+    }
+
+    async function deleteVm() {
+        if (!confirm("Delete VM '{{ vm.name }}'? This cannot be undone.")) return;
+        const res = await fetch(`/api/vm/{{ vm.name }}`, { method: "DELETE" });
+        if (res.ok) window.location.href = "/";
+    }
+</script>
+{% endblock %}
