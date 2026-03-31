@@ -131,6 +131,12 @@ class QEMURunner:
                 "-global", "nec-usb-xhci.msi=off",
             ]
 
+            # macOS display: use vmware-svga which has native macOS driver support
+            # (macOS guests do NOT have native virtio-gpu or virtio-vga drivers)
+            args += [
+                "-device", "vmware-svga,id=gpu0",
+            ]
+
         else:
             # ── Standard (non-macOS) configuration ──────────────────────────
             iso = self.config.get("iso")
