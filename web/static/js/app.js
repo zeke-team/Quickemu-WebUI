@@ -121,4 +121,8 @@ async function doDelete(name) {
 }
 
 // Load VM list when the dashboard DOM is ready
-document.addEventListener("DOMContentLoaded", loadVMs);
+document.addEventListener("DOMContentLoaded", () => {
+    loadVMs();
+    // Poll for status updates every 5 seconds so running/stopped badges stay fresh
+    setInterval(loadVMs, 5000);
+});

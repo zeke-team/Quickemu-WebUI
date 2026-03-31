@@ -56,7 +56,8 @@ class QMPClient:
             raise RuntimeError(f"Unexpected QMP greeting: {greeting}")
 
         # Negotiate capabilities — required before any other commands
-        self._send_json({"execute": "qmp-capabilities"})
+        # NOTE: QMP wire protocol uses underscores, not hyphens (qmp_capabilities not qmp-capabilities)
+        self._send_json({"execute": "qmp_capabilities"})
         result = self._recv_json()
         if result.get("error"):
             raise RuntimeError(f"QMP capabilities negotiation failed: {result}")

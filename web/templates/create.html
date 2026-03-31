@@ -115,6 +115,11 @@ async function loadVersions() {
 
 CAT_SELECT.addEventListener("change", loadVersions);
 
+// Auto-select boot device: CD if ISO path is filled, Disk otherwise
+ISO_INPUT.addEventListener("input", () => {
+    BOOT_SELECT.value = ISO_INPUT.value.trim() ? "cd" : "disk";
+});
+
 document.getElementById("create-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;

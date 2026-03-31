@@ -68,10 +68,10 @@ class QEMURunner:
             "-smp", str(self.config.get("vcpu", 2)),
             # KVM hardware acceleration — critical for performance
             "-enable-kvm",
-            # VNC display: serves both regular VNC and WebSocket VNC
-            # QEMU 8.0+: same port handles both protocols
-            "-display", f"vnc=0.0.0.0:{self.vnc_port}",
-            "-vnc", f"websocket=on,port={self.vnc_port}",
+            # VNC display: WebSocket VNC on display N (port = 5900 + N)
+            # Correct format: -vnc :N,websocket=on (e.g. :30 for port 5930)
+            # e.g. vnc_port=5930 → display :30
+            "-vnc", f":{self.vnc_port - 5900},websocket=on",
             # QMP control socket for management commands
             "-qmp", f"unix:{self.qmp_sock},server=on,wait=off",
             # PID file so we can track the daemonized process
