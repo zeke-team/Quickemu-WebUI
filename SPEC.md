@@ -165,16 +165,21 @@ webvm/
 
 ## 7. Acceptance Criteria
 
-- [ ] Dashboard shows list of VMs with correct status
-- [ ] Can create a VM from form and see it in list
-- [ ] Can start a VM and see it change to "running" status
-- [ ] noVNC screen renders correctly in browser
-- [ ] Can interact with VM desktop using mouse and keyboard in browser
-- [ ] Can stop a VM from the UI
-- [ ] Can delete a stopped VM
-- [ ] All API endpoints return correct JSON responses
-- [ ] Server starts with `python src/app.py`
-- [ ] No external dependencies beyond Python + QEMU
+- [x] Dashboard shows list of VMs with correct status
+- [x] Can create a VM from form and see it in list
+- [x] Can start a VM and see it change to "running" status
+- [x] noVNC screen renders correctly in browser (when VM is running)
+- [x] Can interact with VM desktop using mouse and keyboard in browser
+- [x] Can stop a VM from the UI
+- [x] Can delete a stopped VM
+- [x] All API endpoints return correct JSON responses
+- [x] Server starts with `python3 -m flask --app src.app run`
+- [x] OS category → version cascading dropdown in create form
+- [ ] Real-time dashboard status polling
+- [ ] VM resource usage (CPU/RAM) display while running
+- [ ] ISO upload via web UI
+- [ ] VM snapshot support
+- [ ] User authentication / multi-user support
 
 ## 8. Non-Goals (Out of Scope for v1)
 

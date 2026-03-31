@@ -1,4 +1,18 @@
-"""QEMU process runner — spawns and manages QEMU VM processes."""
+"""
+QEMU process runner.
+
+Responsible for building the full QEMU command-line from a VM config dict
+and spawning the QEMU process as a daemon. Also handles process termination
+and status checking.
+
+Key features:
+- Builds QEMU args from VM config
+- Uses KVM for hardware acceleration when available
+- Enables native WebSocket VNC (no websockify needed, QEMU 8.0+)
+- Exposes QMP control socket for VM management
+- Runs QEMU as a daemon (-daemonize)
+"""
+
 import subprocess
 import os
 import signal
@@ -8,48 +22,84 @@ from .config import QEMU_BIN, QEMU_IMG_BIN, VM_DIR
 
 
 class QEMURunner:
-    """Spawn and manage a QEMU virtual machine process."""
+    """
+    Encapsulates a single QEMU VM process.
+
+    Attributes:
+        name: VM identifier, used in filenames and QEMU -name flag.
+        config: VM configuration dict (ram, vcpu, vnc_port, iso, disk, boot, etc.).
+        pid_file: Path to the file containing the QEMU daemon PID.
+        qmp_sock: Path to the QMP Unix socket for VM control.
+        vnc_port: TCP port for VNC (and WebSocket VNC — same port in QEMU 8.0+).
+    """
 
     def __init__(self, name: str, config: dict):
         self.name = name
         self.config = config
         self.process: subprocess.Popen | None = None
+
+        # Files are stored alongside the VM config in VM_DIR
         self.pid_file = VM_DIR / f"{name}.pid"
         self.qmp_sock = VM_DIR / f"{name}-qmp.sock"
         self.vnc_port = config.get("vnc_port", 5930)
         self.qemu_bin = QEMU_BIN
 
     def build_args(self) -> list[str]:
-        """Build the full QEMU command-line arguments."""
+        """
+        Build the complete QEMU command-line argument list from self.config.
+
+        Returns:
+            List of command-line arguments suitable for subprocess.Popen.
+
+        Key QEMU flags used:
+            -display vnc=0.0.0.0:N    — VNC server bound to all interfaces
+            -vnc websocket=on,port=N   — Enables WebSocket VNC on the same port
+            -qmp unix:SOCK,server=on   — QMP control socket
+            -enable-kvm                — Use KVM for hardware acceleration
+            -daemonize                — Run in background (required for PID tracking)
+        """
         args = [
             self.qemu_bin,
             "-name", self.name,
+            # Machine type q35 is modern UEFI-capable x86_64 platform
             "-machine", "q35",
+            # Memory and CPU
             "-m", str(self.config.get("ram", "4096")),
             "-smp", str(self.config.get("vcpu", 2)),
-            "-enable-kvm",          # KVM acceleration
+            # KVM hardware acceleration — critical for performance
+            "-enable-kvm",
+            # VNC display: serves both regular VNC and WebSocket VNC
+            # QEMU 8.0+: same port handles both protocols
             "-display", f"vnc=0.0.0.0:{self.vnc_port}",
             "-vnc", f"websocket=on,port={self.vnc_port}",
+            # QMP control socket for management commands
             "-qmp", f"unix:{self.qmp_sock},server=on,wait=off",
+            # PID file so we can track the daemonized process
             "-pidfile", str(self.pid_file),
+            # Run in background
             "-daemonize",
         ]
 
+        # Boot media: ISO or disk
         iso = self.config.get("iso")
         if iso:
             args += ["-cdrom", iso]
 
         disk = self.config.get("disk")
         if disk:
-            args += ["-drive", f"file={disk},format=qcow2,cache=writeback"]
+            args += [
+                "-drive",
+                f"file={disk},format=qcow2,cache=writeback"
+            ]
 
+        # Boot device order
         boot_dev = self.config.get("boot", "cd")
         if boot_dev == "cd" and iso:
-            args += ["-boot", "d"]
+            args += ["-boot", "d"]      # Boot from CD first
         elif boot_dev == "disk" and disk:
-            args += ["-boot", "c"]
+            args += ["-boot", "c"]      # Boot from disk first
 
-        # Additional args
+        # Extra QEMU arguments from config (rarely needed)
         extra = self.config.get("extra_args", "")
         if extra:
             args += extra.split()
@@ -57,17 +107,23 @@ class QEMURunner:
         return args
 
     def start(self) -> bool:
-        """Start the QEMU process. Returns True on success."""
+        """
+        Spawn the QEMU process. Returns True on success, False if already running.
+
+        Raises:
+            RuntimeError: If the QEMU binary is not found.
+        """
         if self.is_running():
             return False
 
-        # Remove stale socket and pid file
+        # Clean up stale files from previous runs
         for f in (self.qmp_sock, self.pid_file):
             if f.exists():
                 f.unlink()
 
         args = self.build_args()
         try:
+            # stdout/stderr suppressed; QEMU -daemonize handles backgrounding
             self.process = subprocess.Popen(
                 args,
                 stdout=subprocess.DEVNULL,
@@ -75,18 +131,26 @@ class QEMURunner:
             )
             return True
         except FileNotFoundError:
-            raise RuntimeError(f"QEMU binary not found: {self.qemu_bin}")
+            raise RuntimeError(
+                f"QEMU binary not found at {self.qemu_bin}. "
+                "Install with: sudo apt install qemu-system-x86"
+            )
 
     def stop(self) -> bool:
-        """Stop the QEMU process gracefully via QMP, then kill if needed."""
-        from .qmp_client import QMPClient
+        """
+        Stop the QEMU VM gracefully, then forcefully if needed.
 
+        Tries graceful shutdown via QMP first, then falls back to SIGTERM,
+        and finally SIGKILL if the process is still alive.
+        """
         if self.is_running():
+            # Try graceful shutdown via QMP
             try:
+                from .qmp_client import QMPClient
                 with QMPClient(str(self.qmp_sock)) as client:
                     client.shutdown()
             except Exception:
-                pass
+                pass  # Fall through to kill
 
         # Kill by PID file
         if self.pid_file.exists():
@@ -97,7 +161,7 @@ class QEMURunner:
                 pass
             self.pid_file.unlink()
 
-        # Kill stale QEMU process by name pattern
+        # Fallback: kill any QEMU process matching this VM name
         try:
             subprocess.run(
                 ["pkill", "-f", f"qemu-system-x86_64.*{self.name}"],
@@ -106,21 +170,36 @@ class QEMURunner:
         except Exception:
             pass
 
+        self.process = None
         return True
 
     def is_running(self) -> bool:
-        """Check if VM is running by testing PID file and QMP socket."""
+        """
+        Check whether the VM process is currently running.
+
+        Checks the PID file exists and the process is alive.
+        Cleans up stale PID file if the process is dead.
+        """
         if not self.pid_file.exists():
             return False
 
-        pid = int(self.pid_file.read_text().strip())
         try:
-            os.kill(pid, 0)
+            pid = int(self.pid_file.read_text().strip())
+            os.kill(pid, 0)   # Signal 0 — checks if process exists without sending signal
             return True
         except ProcessLookupError:
+            # PID file exists but process is dead — clean up
+            self.pid_file.unlink()
+            return False
+        except ValueError:
             self.pid_file.unlink()
             return False
 
     def get_vnc_websocket_port(self) -> int:
-        """Return the WebSocket port for VNC (same as VNC port in QEMU 8.2+)."""
+        """
+        Return the WebSocket VNC port.
+
+        In QEMU 8.0+, WebSocket VNC uses the same TCP port as regular VNC.
+        The browser connects directly to ws://host:port with no intermediate proxy.
+        """
         return self.vnc_port
