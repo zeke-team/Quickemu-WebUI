@@ -1,0 +1,58 @@
+{
+  "app_name": "WebVM",
+  "nav": {
+    "dashboard": "Dashboard",
+    "new_vm": "+ New VM",
+    "language": "Language"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "total_vms": "Total VMs",
+    "running": "Running",
+    "stopped": "Stopped",
+    "no_vms": "No VMs yet. Click the button above to create one."
+  },
+  "vm": {
+    "status": "Status",
+    "running": "Running",
+    "stopped": "Stopped",
+    "starting": "Starting",
+    "stopping": "Stopping",
+    "error": "Error",
+    "actions": "Actions",
+    "start": "Start",
+    "stop": "Stop",
+    "restart": "Restart",
+    "delete": "Delete",
+    "console": "Console",
+    "details": "Details",
+    "os": "OS",
+    "version": "Version",
+    "disk": "Disk",
+    "memory": "Memory",
+    "vnc_port": "VNC Port",
+    "ws_port": "WebSocket Port",
+    "confirm_delete": "Confirm delete VM {name}? This cannot be undone.",
+    "confirm_stop": "Confirm stop VM {name}?"
+  },
+  "create": {
+    "title": "Create VM",
+    "os_type": "OS Type",
+    "os_version": "Version",
+    "vm_name": "VM Name",
+    "name_placeholder": "e.g. my-linux-vm",
+    "create_btn": "Create VM",
+    "creating": "Creating...",
+    "linux": "Linux",
+    "windows": "Windows",
+    "macos": "macOS"
+  },
+  "console": {
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "reconnect": "Click to reconnect"
+  },
+  "footer": {
+    "powered_by": "Powered by WebVM"
+  }
+}

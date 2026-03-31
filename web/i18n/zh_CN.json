@@ -1,0 +1,58 @@
+{
+  "app_name": "WebVM 虚拟机管理",
+  "nav": {
+    "dashboard": "仪表盘",
+    "new_vm": "+ 新建虚拟机",
+    "language": "语言"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "total_vms": "虚拟机总数",
+    "running": "运行中",
+    "stopped": "已停止",
+    "no_vms": "暂无虚拟机，点击上方按钮创建"
+  },
+  "vm": {
+    "status": "状态",
+    "running": "运行中",
+    "stopped": "已停止",
+    "starting": "启动中",
+    "stopping": "停止中",
+    "error": "错误",
+    "actions": "操作",
+    "start": "启动",
+    "stop": "停止",
+    "restart": "重启",
+    "delete": "删除",
+    "console": "控制台",
+    "details": "详情",
+    "os": "操作系统",
+    "version": "版本",
+    "disk": "磁盘",
+    "memory": "内存",
+    "vnc_port": "VNC 端口",
+    "ws_port": "WebSocket 端口",
+    "confirm_delete": "确认删除虚拟机 {name}？此操作不可恢复。",
+    "confirm_stop": "确认停止虚拟机 {name}？"
+  },
+  "create": {
+    "title": "创建虚拟机",
+    "os_type": "操作系统类型",
+    "os_version": "版本",
+    "vm_name": "虚拟机名称",
+    "name_placeholder": "例如: my-linux-vm",
+    "create_btn": "创建虚拟机",
+    "creating": "创建中...",
+    "linux": "Linux",
+    "windows": "Windows",
+    "macos": "macOS"
+  },
+  "console": {
+    "connecting": "正在连接...",
+    "disconnected": "已断开连接",
+    "reconnect": "点击重新连接"
+  },
+  "footer": {
+    "powered_by": "Powered by WebVM"
+  }
+}

@@ -52,6 +52,32 @@ nav {
 
 .nav-links a:hover { color: var(--text); }
 
+.lang-switcher {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: 1rem;
+}
+
+.lang-btn {
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: var(--surface2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+}
+
+.lang-btn:hover { color: var(--text); border-color: var(--accent); }
+
+.lang-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
 /* ── Main ───────────────────────────────────────────────────────────────── */
 main {
     max-width: 1200px;
@@ -234,15 +260,33 @@ small { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: var(--te
 
 /* ── VNC Container ──────────────────────────────────────────────────────── */
 .vnc-container {
-    background: var(--surface);
+    background: #313131;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
     margin-bottom: 1.5rem;
-    aspect-ratio: 16/10;
+    width: 100%;
+    min-height: 500px;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+#vnc-stretch {
+    position: relative;
+}
+
+#console-canvas {
+    display: block;
+    background: #313131;
+}
+
+#conn-status {
+    color: #8892a8;
+    font-family: monospace;
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
 }
 
 .vnc-placeholder {

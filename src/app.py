@@ -10,11 +10,15 @@ This module is the main Flask application entry point. It provides:
 All API endpoints return JSON. All UI routes return rendered HTML templates.
 """
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_from_directory, session, redirect, url_for, make_response
 
 from .config import HOST, PORT, DEBUG, VM_DIR, ISO_DIR
 from .vm_manager import VMManager
 from .os_catalog import all_categories, all_versions
+from .i18n import (
+    get_current_language, set_language, t as _t,
+    LANGUAGES, lang_select_options, get_translations,
+)
 
 
 def create_app():
@@ -34,6 +38,18 @@ def create_app():
     # Store VMManager instance on app context for access in routes
     app.vm_mgr = VMManager()
 
+    # ── i18n context processor — injects translations into all templates ──
+    @app.context_processor
+    def inject_i18n():
+        lang = get_current_language()
+        return {
+            "lang":       lang,
+            "langs":      lang_select_options(lang),
+            "languages":  LANGUAGES,
+            "t":         lambda key, **kw: _t(key, lang, **kw),
+            "trans":     get_translations(lang),
+        }
+
     _register_routes(app)
     return app
 
@@ -45,6 +61,18 @@ def _register_routes(app: Flask):
     Args:
         app: Flask application instance.
     """
+
+    # ── Language switcher ──────────────────────────────────────────────────
+
+    @app.route("/lang/<lang_code>")
+    def setlang(lang_code: str):
+        """Switch language and redirect back."""
+        if lang_code in LANGUAGES:
+            session["lang"] = lang_code
+            response = make_response(redirect(request.referrer or "/"))
+            response.set_cookie("webvm_lang", lang_code, max_age=60*60*24*30)
+            return response
+        return redirect("/")
 
     # ── Web UI routes ──────────────────────────────────────────────────────
 
@@ -65,6 +93,19 @@ def _register_routes(app: Flask):
         if not vm:
             return "VM not found", 404
         return render_template("vm.html", vm=vm)
+
+    @app.route("/console/<name>")
+    def vm_console(name: str):
+        """
+        Standalone noVNC console page for a VM.
+        Renders the vm_console.html template with VM data injected.
+        """
+        vm = app.vm_mgr.get_vm(name)
+        if not vm:
+            return "VM not found", 404
+        if vm["status"] != "running":
+            return "VM is not running", 400
+        return render_template("vm_console.html", vm=vm)
 
     @app.route("/create")
     def create_page():

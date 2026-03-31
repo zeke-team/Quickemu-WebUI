@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ vm.name }} — WebVM{% endblock %}
+{% block title %}{{ vm.name }} — {{ t("app_name") }}{% endblock %}
 {% block content %}
 <div class="vm-header">
     <div class="vm-info">
@@ -8,156 +8,100 @@
         <span class="vm-meta">{{ vm.os_category }} / {{ vm.os_version }} · {{ vm.ram }}MB RAM · {{ vm.vcpu }} vCPU</span>
     </div>
     <div class="vm-controls">
-        <button id="btn-start"    class="btn btn-success {{ 'hidden' if vm.status != 'stopped' }}" onclick="performAction('start')">Start</button>
-        <button id="btn-stop"     class="btn btn-danger {{ 'hidden' if vm.status == 'stopped' }}" onclick="performAction('stop')">Stop</button>
-        <button id="btn-reboot"   class="btn btn-secondary {{ 'hidden' if vm.status == 'stopped' }}" onclick="performAction('reboot')">Reboot</button>
-        <button id="btn-delete"   class="btn btn-danger-outline" onclick="deleteVm()">Delete</button>
-        <a href="/" class="btn btn-secondary">Back</a>
+        {% if vm.status == 'stopped' %}
+        <button class="btn btn-success" onclick="doAction('start')">{{ t("vm_actions.start") }}</button>
+        {% else %}
+        <button class="btn btn-danger" onclick="doAction('stop')">{{ t("vm_actions.stop") }}</button>
+        <button class="btn btn-secondary" onclick="doAction('reboot')">{{ t("vm_actions.reboot") }}</button>
+        {% endif %}
+        <button class="btn btn-danger-outline" onclick="deleteVm()">{{ t("vm_actions.delete") }}</button>
+        <a href="/" class="btn btn-secondary">←</a>
     </div>
 </div>
 
 <div id="vnc-container" class="vnc-container">
     <div id="vnc-connected" class="{{ 'hidden' if vm.status != 'running' }}">
-        <div class="vnc-toolbar">
-            <span id="vnc-status-text" class="vnc-status-text">Connecting...</span>
-        </div>
-        <div id="noVNC-screen" class="noVNC-screen">
-            <canvas id="noVNC_canvas" width="800" height="600"></canvas>
+        <div id="vnc-stretch">
+            <div id="conn-status">{{ t("vm_detail.connecting") }}</div>
+            <canvas id="console-canvas" class="hidden"></canvas>
         </div>
     </div>
     <div id="vnc-disconnected" class="{{ 'hidden' if vm.status == 'running' }}">
         <div class="vnc-placeholder">
-            <p id="vnc-msg">VM is stopped. Start it to see the screen.</p>
+            <p>{{ t("vm_detail.stopped_msg") }}</p>
         </div>
     </div>
 </div>
 
 <div class="vm-details">
-    <h3>Configuration</h3>
+    <h3>{{ t("vm_detail.configuration") }}</h3>
     <dl class="config-list">
         <dt>Name</dt><dd>{{ vm.name }}</dd>
-        <dt>OS Category</dt><dd>{{ vm.os_category }}</dd>
-        <dt>OS Version</dt><dd>{{ vm.os_version }}</dd>
+        <dt>OS</dt><dd>{{ vm.os_category }} / {{ vm.os_version }}</dd>
         <dt>RAM</dt><dd>{{ vm.ram }} MB</dd>
         <dt>vCPUs</dt><dd>{{ vm.vcpu }}</dd>
         <dt>Disk</dt><dd>{{ vm.disk }}</dd>
-        <dt>Disk Size</dt><dd>{{ vm.disk_size }}</dd>
-        <dt>VNC Port</dt><dd>{{ vm.vnc_port }}</dd>
-        <dt>Boot</dt><dd>{{ vm.boot }}</dd>
+        <dt>{{ t("vm_detail.vnc_port") }}</dt><dd>{{ vm.vnc_port }}</dd>
+        <dt>{{ t("vm_detail.ws_port") }}</dt><dd>{{ vm.vnc_ws_port }}</dd>
     </dl>
 </div>
 
 <script type="module">
     import RFB from "{{ url_for('static', filename='js/novnc/core/rfb.js') }}";
 
-    const VM_NAME  = {{ vm.name | tojson }};
-    const VNC_PORT  = {{ vm.vnc_port }};
-    const WS_PORT   = {{ vm.vnc_ws_port }};
-    const WS_URL    = `ws://${window.location.hostname}:${WS_PORT}`;
+    const wsUrl   = `ws://${window.location.hostname}:{{ vm.vnc_ws_port }}`;
+    const VM_NAME = {{ vm.name | tojson }};
+    const container = document.getElementById('vnc-container');
+    const stretch   = document.getElementById('vnc-stretch');
+    const canvas    = document.getElementById('console-canvas');
+    const status    = document.getElementById('conn-status');
 
-    const canvas         = document.getElementById('noVNC_canvas');
-    const connectedEl    = document.getElementById('vnc-connected');
-    const disconnectedEl = document.getElementById('vnc-disconnected');
-    const statusTextEl   = document.getElementById('vnc-status-text');
-    const msgEl          = document.getElementById('vnc-msg');
-
-    let rfb = null;
-
-    function showConnected() {
-        connectedEl.classList.remove('hidden');
-        disconnectedEl.classList.add('hidden');
+    function fillContainer() {
+        if (canvas.classList.contains('hidden')) return;
+        const cw = 1920, ch = 1080;
+        const vw = container.clientWidth;
+        const vh = container.clientHeight || Math.round(vw * 9 / 16);
+        const sx = vw / cw, sy = vh / ch;
+        const s  = Math.min(sx, sy);
+        stretch.style.width  = Math.round(cw * s) + 'px';
+        stretch.style.height = Math.round(ch * s) + 'px';
+        canvas.style.width  = Math.round(cw * s) + 'px';
+        canvas.style.height = Math.round(ch * s) + 'px';
+        canvas.width  = cw;
+        canvas.height = ch;
     }
 
-    function showDisconnected(msg) {
-        if (rfb) { rfb.disconnect(); rfb = null; }
-        connectedEl.classList.add('hidden');
-        disconnectedEl.classList.remove('hidden');
-        if (msg) msgEl.textContent = msg;
-    }
+    window.addEventListener('resize', fillContainer);
 
-    function connectVNC() {
-        if (rfb) rfb.disconnect();
-        statusTextEl.textContent = "Connecting...";
-        showConnected();
-        try {
-            rfb = new RFB(canvas, WS_URL, { credentials: { password: '' } });
-            rfb.addEventListener("connect", () => {
-                statusTextEl.textContent = "Connected";
-            });
-            rfb.addEventListener("disconnect", () => {
-                statusTextEl.textContent = "Disconnected";
-                // Poll status to decide what to show
-                pollStatus();
-            });
-        } catch (e) {
-            statusTextEl.textContent = "Connection failed: " + e.message;
-        }
-    }
-
-    // Expose to button onclick handlers
-    window.performAction = async (action) => {
-        const res = await fetch(`/api/vm/${VM_NAME}/${action}`, { method: "POST" });
-        if (res.ok) {
-            const data = await res.json();
-            updateUI(data.result || action);
-        }
-    };
-
-    function updateUI(action) {
-        // Update button visibility based on action result
-        const btnStart  = document.getElementById('btn-start');
-        const btnStop   = document.getElementById('btn-stop');
-        const btnReboot = document.getElementById('btn-reboot');
-
-        if (action === 'started') {
-            btnStart.classList.add('hidden');
-            btnStop.classList.remove('hidden');
-            btnReboot.classList.remove('hidden');
-            connectVNC();
-        } else if (action === 'stopped') {
-            btnStop.classList.add('hidden');
-            btnReboot.classList.add('hidden');
-            btnStart.classList.remove('hidden');
-            showDisconnected("VM is stopped. Start it to see the screen.");
-        } else if (action === 'rebooted') {
-            // VM stays running, just acknowledge
-        }
-    }
-
-    async function pollStatus() {
-        try {
-            const res = await fetch(`/api/vm/${VM_NAME}/status`);
-            const data = await res.json();
-            const statusEl = document.getElementById('status-badge');
-            statusEl.textContent = data.status;
-            statusEl.className = `status-badge status-${data.status}`;
-            if (data.status === 'stopped') {
-                showDisconnected("VM is stopped. Start it to see the screen.");
-                document.getElementById('btn-stop').classList.add('hidden');
-                document.getElementById('btn-reboot').classList.add('hidden');
-                document.getElementById('btn-start').classList.remove('hidden');
-            }
-        } catch (e) {
-            // VM might be gone
-        }
-    }
-
-    // Initial state
     if ({{ (vm.status == 'running') | tojson }}) {
-        connectVNC();
+        try {
+            const rfb = new RFB(canvas, wsUrl, { credentials: { password: '' }, viewport: false });
+            rfb.addEventListener('connect', () => {
+                status.classList.add('hidden');
+                canvas.classList.remove('hidden');
+                fillContainer();
+            });
+            rfb.addEventListener('disconnect', () => {
+                status.textContent = window.__I18N.vm_detail?.disconnected || 'Disconnected';
+                status.classList.remove('hidden');
+                canvas.classList.add('hidden');
+            });
+            window._rfb = rfb;
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+        }
     }
-
-    // Poll status every 3 seconds to detect external stops
-    setInterval(pollStatus, 3000);
-
-    window.addEventListener("beforeunload", () => { if (rfb) rfb.disconnect(); });
 </script>
 
 <script>
+    async function doAction(action) {
+        const res = await fetch(`/api/vm/${VM_NAME}/${action}`, { method: 'POST' });
+        if (res.ok) location.reload();
+    }
     async function deleteVm() {
-        if (!confirm("Delete VM '{{ vm.name }}'? This cannot be undone.")) return;
-        const res = await fetch(`/api/vm/{{ vm.name }}`, { method: "DELETE" });
-        if (res.ok) window.location.href = "/";
+        if (!confirm("Delete VM?")) return;
+        const res = await fetch(`/api/vm/${VM_NAME}`, { method: 'DELETE' });
+        if (res.ok) window.location.href = '/';
     }
 </script>
 {% endblock %}

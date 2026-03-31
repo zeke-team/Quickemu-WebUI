@@ -1,20 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}WebVM{% endblock %}</title>
+    <title>{% block title %}{{ t("app_name") }}{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <nav>
         <div class="nav-brand">
-            <a href="/">WebVM</a>
+            <a href="/">{{ t("app_name") }}</a>
         </div>
         <div class="nav-links">
-            <a href="/">Dashboard</a>
-            <a href="/create">+ New VM</a>
+            <a href="/">{{ t("nav.dashboard") }}</a>
+            <a href="/create">{{ t("nav.new_vm") }}</a>
+            <div class="lang-switcher">
+                {% for l in langs %}
+                    <a href="/lang/{{ l.id }}" class="lang-btn {{ 'active' if l.selected else '' }}">{{ l.name }}</a>
+                {% endfor %}
+            </div>
         </div>
     </nav>
 
@@ -23,6 +28,10 @@
     </main>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+      // Inject translations for JS use
+      window.__I18N = {{ trans | tojson }};
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

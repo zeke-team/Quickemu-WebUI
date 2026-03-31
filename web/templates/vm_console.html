@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WebVM{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body { background: #0f1117; }
+        #console-wrap {
+            width: 100%;
+            min-height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #313131;
+        }
+        #console-canvas {
+            background: #313131;
+            display: block;
+        }
+        #conn-status {
+            color: #8892a8;
+            font-family: monospace;
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-brand"><a href="/">WebVM</a></div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/vm/{{ vm.name }}">← Back</a>
+        </div>
+    </nav>
+
+    <main>
+        <div class="vm-header">
+            <div class="vm-info">
+                <h1>{{ vm.name }}</h1>
+                <span class="status-badge status-{{ vm.status }}">{{ vm.status }}</span>
+                <span class="vm-meta">{{ vm.os_category }} / {{ vm.os_version }} · {{ vm.ram }}MB RAM · {{ vm.vcpu }} vCPU</span>
+            </div>
+            <div class="vm-controls">
+                <button class="btn btn-danger" onclick="doAction('stop')">Stop</button>
+                <button class="btn btn-secondary" onclick="doAction('reboot')">Reboot</button>
+                <a href="/" class="btn btn-secondary">Back</a>
+            </div>
+        </div>
+
+        <div id="console-wrap">
+            <div id="conn-status">Connecting to {{ vm.vnc_ws_port }}...</div>
+            <canvas id="console-canvas" class="hidden"></canvas>
+        </div>
+    </main>
+
+    <script type="module">
+        import RFB from "{{ url_for('static', filename='js/novnc/core/rfb.js') }}";
+
+        const wsHost = window.location.hostname;
+        const wsPort = {{ vm.vnc_ws_port }};
+        const wsUrl  = `ws://${wsHost}:${wsPort}`;
+
+        const wrap   = document.getElementById('console-wrap');
+        const canvas = document.getElementById('console-canvas');
+        const status = document.getElementById('conn-status');
+
+        function resizeCanvas() {
+            // Fill the wrapper while maintaining 16:9 aspect ratio
+            const ww = wrap.clientWidth;
+            const wh = wrap.clientHeight || Math.round(ww * 9 / 16);
+            const targetRatio = 16 / 9;
+            const currentRatio = ww / wh;
+
+            let w, h;
+            if (currentRatio > targetRatio) {
+                // wrapper is wider than 16:9 — fit by height
+                h = Math.min(ww / targetRatio, wh);
+                w = h * targetRatio;
+            } else {
+                // wrapper is taller — fit by width
+                w = ww;
+                h = w / targetRatio;
+            }
+
+            canvas.style.width  = w + 'px';
+            canvas.style.height = h + 'px';
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function connect() {
+            resizeCanvas();
+            try {
+                const rfb = new RFB(canvas, wsUrl, {
+                    credentials: { password: '' },
+                    viewport: false,   // don't restrict to window size
+                });
+
+                rfb.addEventListener('connect', () => {
+                    status.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    resizeCanvas();
+                });
+
+                rfb.addEventListener('disconnect', () => {
+                    status.textContent = 'Disconnected. VM may have stopped.';
+                    status.classList.remove('hidden');
+                    canvas.classList.add('hidden');
+                });
+
+                rfb.addEventListener('securityfailure', (e) => {
+                    status.textContent = 'Security failure: ' + e.detail.reason;
+                });
+
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        if ({{ (vm.status == 'running') | tojson }}) {
+            connect();
+        } else {
+            status.textContent = 'VM is not running.';
+        }
+    </script>
+
+    <script>
+        async function doAction(action) {
+            const name = {{ vm.name | tojson }};
+            const res = await fetch(`/api/vm/${name}/${action}`, { method: 'POST' });
+            if (res.ok) location.reload();
+        }
+    </script>
+</body>
+</html>
