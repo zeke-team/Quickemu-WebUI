@@ -51,8 +51,9 @@
     import RFB from "{{ url_for('static', filename='js/novnc/core/rfb.js') }}";
 
     const VM_NAME  = {{ vm.name | tojson }};
-    const VNC_PORT = {{ vm.vnc_port }};
-    const WS_URL   = `ws://${window.location.hostname}:${VNC_PORT}`;
+    const VNC_PORT  = {{ vm.vnc_port }};
+    const WS_PORT   = {{ vm.vnc_ws_port }};
+    const WS_URL    = `ws://${window.location.hostname}:${WS_PORT}`;
 
     const canvas         = document.getElementById('noVNC_canvas');
     const connectedEl    = document.getElementById('vnc-connected');

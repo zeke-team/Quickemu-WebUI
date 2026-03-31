@@ -83,6 +83,7 @@ class VMManager:
                 data = json.loads(f.read_text())
                 runner = QEMURunner(data["name"], data)
                 data["status"] = "running" if runner.is_running() else "stopped"
+                data["vnc_ws_port"] = runner.get_vnc_websocket_port()
                 vms.append(data)
             except Exception:
                 pass
@@ -104,6 +105,7 @@ class VMManager:
         data = json.loads(path.read_text())
         runner = QEMURunner(name, data)
         data["status"] = "running" if runner.is_running() else "stopped"
+        data["vnc_ws_port"] = runner.get_vnc_websocket_port()
         return data
 
     def create_vm(

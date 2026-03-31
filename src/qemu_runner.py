@@ -30,7 +30,8 @@ class QEMURunner:
         config: VM configuration dict (ram, vcpu, vnc_port, iso, disk, boot, etc.).
         pid_file: Path to the file containing the QEMU daemon PID.
         qmp_sock: Path to the QMP Unix socket for VM control.
-        vnc_port: TCP port for VNC (and WebSocket VNC — same port in QEMU 8.0+).
+        vnc_port: TCP port for VNC (e.g. 5930 = display :30).
+                    WebSocket VNC uses a separate port: vnc_port - 200 (e.g. 5730).
     """
 
     def __init__(self, name: str, config: dict):
@@ -70,9 +71,9 @@ class QEMURunner:
             "-smp", str(self.config.get("vcpu", 2)),
             # KVM hardware acceleration — critical for performance
             "-enable-kvm",
-            # VNC display: WebSocket VNC on display N (port = 5900 + N)
-            # Correct format: -vnc :N,websocket=on (e.g. :30 for port 5930)
-            # e.g. vnc_port=5930 → display :30
+            # VNC display: -vnc :N,websocket=on (e.g. :30 for port 5930)
+            # WebSocket VNC uses a separate port: vnc_port - 200 (e.g. 5930 → websocket on 5730)
+            # browser connects to ws://host:WS_PORT where WS_PORT = vnc_port - 200
             "-vnc", f":{self.vnc_port - 5900},websocket=on",
             # QMP control socket for management commands
             "-qmp", f"unix:{self.qmp_sock},server=on,wait=off",
@@ -257,7 +258,9 @@ class QEMURunner:
         """
         Return the WebSocket VNC port.
 
-        In QEMU 8.0+, WebSocket VNC uses the same TCP port as regular VNC.
-        The browser connects directly to ws://host:port with no intermediate proxy.
+        QEMU VNC uses two separate ports:
+        - Standard VNC: vnc_port (e.g. 5930)
+        - WebSocket VNC: vnc_port - 200 (e.g. 5730)
+        The browser connects via WebSocket to ws://host:websocket_port.
         """
-        return self.vnc_port
+        return self.vnc_port - 200
