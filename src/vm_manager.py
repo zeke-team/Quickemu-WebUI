@@ -65,7 +65,8 @@ class VMManager:
     def create_vm(
         self,
         name: str,
-        os_type: str,
+        os_category: str,
+        os_version: str,
         iso_path: str = "",
         disk_size: str = "64G",
         ram: str = "4096",
@@ -90,7 +91,8 @@ class VMManager:
 
         config = {
             "name": name,
-            "os_type": os_type,
+            "os_category": os_category,
+            "os_version": os_version,
             "iso": iso_path,
             "disk": disk,
             "disk_size": disk_size,

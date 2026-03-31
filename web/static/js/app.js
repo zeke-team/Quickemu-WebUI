@@ -15,7 +15,7 @@ async function fetchJSON(url, options = {}) {
 }
 
 function vmCard(vm) {
-    const meta = `${vm.os_type} · ${vm.ram}MB RAM · ${vm.vcpu} vCPU · ${vm.disk_size}`;
+    const meta = `${vm.os_category} / ${vm.os_version} · ${vm.ram}MB RAM · ${vm.vcpu} vCPU · ${vm.disk_size}`;
     return `
     <div class="vm-card">
         <div class="vm-card-header">

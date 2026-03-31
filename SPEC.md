@@ -49,7 +49,8 @@
 ### 3.2 VM Creation
 - Form fields:
   - VM name (required, unique)
-  - OS type: Linux / Windows / macOS / Other
+  - OS category: Linux / Windows / macOS / Other
+  - OS version (cascading dropdown based on category, e.g., Ubuntu 24.04, Fedora 41, Windows 11, macOS Sequoia)
   - ISO file upload or path selection
   - Disk size (GB)
   - RAM size (MB)
@@ -89,7 +90,8 @@ All API endpoints return JSON.
 ```json
 {
   "name": "my-ubuntu",
-  "os_type": "linux",
+  "os_category": "linux",
+  "os_version": "ubuntu-24.04",
   "iso": "/path/to/ubuntu.iso",
   "disk_size": "64G",
   "ram": "4096",

@@ -5,6 +5,7 @@ from flask import Flask, jsonify, request, render_template, send_from_directory
 
 from .config import HOST, PORT, DEBUG, VM_DIR, ISO_DIR
 from .vm_manager import VMManager
+from .os_catalog import all_categories, all_versions
 
 app = Flask(__name__, template_folder="../web/templates", static_folder="../web/static")
 app.secret_key = os.urandom(32)
@@ -51,7 +52,7 @@ def api_get(name: str):
 def api_create():
     data = request.get_json() or {}
 
-    required = ["name", "os_type"]
+    required = ["name", "os_category", "os_version"]
     for field in required:
         if field not in data:
             return jsonify({"error": f"Missing field: {field}"}), 400
@@ -59,7 +60,8 @@ def api_create():
     try:
         vm = vm_mgr.create_vm(
             name=data["name"],
-            os_type=data["os_type"],
+            os_category=data["os_category"],
+            os_version=data["os_version"],
             iso_path=data.get("iso", ""),
             disk_size=data.get("disk_size", "64G"),
             ram=data.get("ram", "4096"),
@@ -113,6 +115,22 @@ def api_reboot(name: str):
 def api_status(name: str):
     status = vm_mgr.get_status(name)
     return jsonify({"name": name, "status": status})
+
+
+# ── OS Catalog API ─────────────────────────────────────────────────────────
+
+@app.route("/api/os/categories")
+def api_categories():
+    cats = []
+    for c in all_categories():
+        cats.append({"id": c.id, "name": c.name})
+    return jsonify(cats)
+
+
+@app.route("/api/os/versions/<category_id>")
+def api_versions(category_id):
+    versions = all_versions(category_id)
+    return jsonify([{"id": v.id, "name": v.name} for v in versions])
 
 
 # ── ISO file handling ────────────────────────────────────────────────────────

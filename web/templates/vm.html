@@ -5,7 +5,7 @@
     <div class="vm-info">
         <h1>{{ vm.name }}</h1>
         <span class="status-badge status-{{ vm.status }}">{{ vm.status }}</span>
-        <span class="vm-meta">{{ vm.os_type }} · {{ vm.ram }}MB RAM · {{ vm.vcpu }} vCPU</span>
+        <span class="vm-meta">{{ vm.os_category }} / {{ vm.os_version }} · {{ vm.ram }}MB RAM · {{ vm.vcpu }} vCPU</span>
     </div>
     <div class="vm-controls">
         {% if vm.status == "stopped" %}

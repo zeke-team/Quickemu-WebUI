@@ -11,20 +11,25 @@
         <input type="text" id="name" name="name" required placeholder="e.g. my-ubuntu">
     </div>
 
-    <div class="form-group">
-        <label for="os_type">OS Type *</label>
-        <select id="os_type" name="os_type" required>
-            <option value="linux">Linux</option>
-            <option value="windows">Windows</option>
-            <option value="macos">macOS</option>
-            <option value="other">Other</option>
-        </select>
+    <div class="form-row">
+        <div class="form-group">
+            <label for="os_category">OS Category *</label>
+            <select id="os_category" name="os_category" required>
+                <option value="">— Select —</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="os_version">OS Version *</label>
+            <select id="os_version" name="os_version" required disabled>
+                <option value="">— Select category first —</option>
+            </select>
+        </div>
     </div>
 
     <div class="form-group">
         <label for="iso">ISO File</label>
         <input type="text" id="iso" name="iso" placeholder="/path/to/install.iso">
-        <small>Or leave blank to boot from disk</small>
+        <small>Leave blank to boot from disk only</small>
     </div>
 
     <div class="form-row">
@@ -62,17 +67,66 @@
 
 {% block scripts %}
 <script>
+const CAT_SELECT  = document.getElementById("os_category");
+const VER_SELECT  = document.getElementById("os_version");
+const BOOT_SELECT = document.getElementById("boot");
+const ISO_INPUT   = document.getElementById("iso");
+
+// Load OS categories on page load
+async function loadCategories() {
+    const res  = await fetch("/api/os/categories");
+    const cats = await res.json();
+    CAT_SELECT.innerHTML = '<option value="">— Select —</option>';
+    cats.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.name;
+        CAT_SELECT.appendChild(opt);
+    });
+}
+
+// Load versions when category changes
+async function loadVersions() {
+    const catId = CAT_SELECT.value;
+    VER_SELECT.innerHTML = '<option value="">Loading…</option>';
+    VER_SELECT.disabled = true;
+
+    if (!catId) {
+        VER_SELECT.innerHTML = '<option value="">— Select category first —</option>';
+        return;
+    }
+
+    const res  = await fetch(`/api/os/versions/${catId}`);
+    const vers = await res.json();
+    VER_SELECT.innerHTML = '<option value="">— Select —</option>';
+    vers.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name;
+        VER_SELECT.appendChild(opt);
+    });
+    VER_SELECT.disabled = false;
+
+    // Auto-select ISO if available for macOS
+    if (catId === "macos") {
+        ISO_INPUT.placeholder = "/home/user/VMs/macos-sequoia/RecoveryImage.img";
+    }
+}
+
+CAT_SELECT.addEventListener("change", loadVersions);
+
 document.getElementById("create-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
     const data = {
-        name: form.name.value,
-        os_type: form.os_type.value,
-        iso: form.iso.value,
-        ram: form.ram.value,
-        vcpu: form.vcpu.value,
-        disk_size: form.disk_size.value,
-        boot: form.boot.value,
+        name:         form.name.value,
+        os_category:  form.os_category.value,
+        os_version:   form.os_version.value,
+        iso:          form.iso.value,
+        ram:          form.ram.value,
+        vcpu:         form.vcpu.value,
+        disk_size:    form.disk_size.value,
+        boot:         form.boot.value,
     };
 
     const errEl = document.getElementById("error-msg");
@@ -96,5 +150,7 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
         errEl.classList.remove("hidden");
     }
 });
+
+loadCategories();
 </script>
 {% endblock %}
