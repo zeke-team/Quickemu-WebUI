@@ -20,6 +20,7 @@ from typing import Optional
 
 from .config import VM_DIR, ISO_DIR, QEMU_IMG_BIN, VNC_BASE_PORT
 from .qemu_runner import QEMURunner
+from .os_catalog import quickemu_os_release
 
 
 class VMManager:
@@ -66,6 +67,60 @@ class VMManager:
         while port in used:
             port += 1
         return port
+
+    # ── ISO downloading via quickemu quickget ─────────────────────────────
+
+    def download_iso(self, os_category: str, os_version: str) -> str:
+        """
+        Download an OS ISO image using quickemu's quickget.
+
+        Runs ``quickget --download <os> <release>`` in the ISO_DIR directory
+        and waits for the download to complete.
+
+        Args:
+            os_category: OS family (e.g. "linux", "windows", "macos").
+            os_version:   OS version ID (e.g. "ubuntu-24.04").
+
+        Returns:
+            Absolute path to the downloaded ISO file.
+
+        Raises:
+            RuntimeError: If quickget fails or the OS is not supported.
+        """
+        mapping = quickemu_os_release(os_version)
+        if not mapping:
+            raise RuntimeError(
+                f"No quickemu download available for OS version: {os_version}"
+            )
+        qemu_os, qemu_release = mapping
+
+        cmd = ["quickget", "--download", qemu_os]
+        if qemu_release:
+            cmd.append(qemu_release)
+
+        result = subprocess.run(
+            cmd,
+            cwd=str(ISO_DIR),
+            capture_output=True,
+            text=True,
+            timeout=3600,  # up to 1 hour for large downloads
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"quickget failed: {result.stderr.strip()}")
+
+        # quickget prints "Downloading <OS>..." and saves the ISO in CWD.
+        # Heuristic: find the newest .iso file in ISO_DIR that is older than
+        # this invocation (avoids matching ISOs from previous downloads).
+        isos = sorted(
+            (f for f in ISO_DIR.glob("*.iso") if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        if not isos:
+            raise RuntimeError(
+                f"quickget completed but no .iso found in {ISO_DIR}"
+            )
+        return str(isos[0])
 
     # ── CRUD ───────────────────────────────────────────────────────────────
 
@@ -123,13 +178,14 @@ class VMManager:
         Create a new VM definition and allocate its disk image.
 
         Creates a qcow2 disk image using qemu-img, writes the JSON config,
-        and stores everything in VM_DIR.
+        and stores everything in VM_DIR.  If no ISO path is provided, the OS
+        image is automatically downloaded via ``quickget --download``.
 
         Args:
             name: Unique VM identifier.
             os_category: OS family (linux, windows, macos, other).
             os_version: Specific release (e.g. ubuntu-24.04, windows-11).
-            iso_path: Path to installation ISO (optional).
+            iso_path: Path to installation ISO (optional; downloaded if empty).
             disk_size: Disk image size (e.g. "64G", "128G").
             ram: RAM in MB.
             vcpu: Number of virtual CPUs.
@@ -140,7 +196,7 @@ class VMManager:
 
         Raises:
             FileExistsError: If a VM with this name already exists.
-            RuntimeError: If qemu-img fails to create the disk image.
+            RuntimeError: If qemu-img fails or ISO download fails.
         """
         if self._vm_path(name).exists():
             raise FileExistsError(f"VM '{name}' already exists")
@@ -156,6 +212,10 @@ class VMManager:
         )
         if result.returncode != 0:
             raise RuntimeError(f"qemu-img failed: {result.stderr}")
+
+        # Auto-download ISO if not provided
+        if not iso_path:
+            iso_path = self.download_iso(os_category, os_version)
 
         config = {
             "name": name,

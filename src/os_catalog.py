@@ -140,3 +140,52 @@ def all_versions(category_id: str) -> list[OSVersion]:
     """Return all versions for a given category ID."""
     cat = get_category(category_id)
     return cat.versions if cat else []
+
+
+# ── QuickEMU/QuickGet integration ──────────────────────────────────────────────
+# Mapping from webvm os_version ID → (quickemu_os, quickemu_release).
+# quickemu OS names must match the function names in quickget (e.g. ubuntu,
+# fedora, debian, archlinux, linuxmint, opensuse, almalinux, rockylinux, windows,
+# macos).  Release is the version string quickget expects after the OS arg.
+
+_QUICKEMU_OS_MAP: dict[str, tuple[str, str]] = {
+    # Linux
+    "ubuntu-24.04":  ("ubuntu",     "24.04"),
+    "ubuntu-22.04":  ("ubuntu",     "22.04"),
+    "ubuntu-20.04":  ("ubuntu",     "20.04"),
+    "fedora-41":     ("fedora",     "41"),
+    "fedora-40":     ("fedora",     "40"),
+    "debian-12":     ("debian",     "12"),
+    "debian-11":     ("debian",     "11"),
+    "archlinux":     ("archlinux",  ""),
+    "linuxmint-21":  ("linuxmint",  "21"),
+    "opensuse-15":   ("opensuse",   "15"),
+    "almalinux-9":   ("almalinux", "9"),
+    "rockylinux-9":  ("rockylinux","9"),
+    # Windows
+    "windows-11":            ("windows", "11"),
+    "windows-10":            ("windows", "10"),
+    "windows-server-2022":   ("windows", "server-2022"),
+    "windows-server-2019":   ("windows", "server-2019"),
+    # macOS
+    "tahoe":         ("macos", "tahoe"),
+    "sequoia":       ("macos", "sequoia"),
+    "sonoma":        ("macos", "sonoma"),
+    "ventura":       ("macos", "ventura"),
+    "monterey":      ("macos", "monterey"),
+    "big-sur":       ("macos", "big-sur"),
+    "catalina":      ("macos", "catalina"),
+    "mojave":        ("macos", "mojave"),
+    # Other
+    "generic":       ("",       ""),   # no auto-download
+}
+
+
+def quickemu_os_release(os_version: str) -> tuple[str, str] | None:
+    """
+    Map a webvm os_version ID to (quickemu_os, quickemu_release) for use with
+    quickget --download <os> <release>.
+
+    Returns None if the OS has no quickemu equivalent or cannot be downloaded.
+    """
+    return _QUICKEMU_OS_MAP.get(os_version)
