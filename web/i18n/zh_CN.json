@@ -10,7 +10,9 @@
     "total_vms": "虚拟机总数",
     "running": "运行中",
     "stopped": "已停止",
-    "no_vms": "暂无虚拟机，点击上方按钮创建"
+    "no_vms": "暂无虚拟机，点击上方按钮创建",
+    "no_vms_link": "立即创建",
+    "loading": "加载中..."
   },
   "vm": {
     "status": "状态",
@@ -35,6 +37,21 @@
     "confirm_delete": "确认删除虚拟机 {name}？此操作不可恢复。",
     "confirm_stop": "确认停止虚拟机 {name}？"
   },
+  "vm_actions": {
+    "start": "启动",
+    "stop": "停止",
+    "restart": "重启",
+    "view": "详情",
+    "delete": "删除",
+    "confirm_delete": "确认删除虚拟机 {name}？此操作不可恢复。"
+  },
+  "vm_status": {
+    "running": "运行中",
+    "stopped": "已停止",
+    "starting": "启动中",
+    "stopping": "停止中",
+    "error": "错误"
+  },
   "create": {
     "title": "创建虚拟机",
     "os_type": "操作系统类型",
@@ -51,6 +68,14 @@
     "connecting": "正在连接...",
     "disconnected": "已断开连接",
     "reconnect": "点击重新连接"
+  },
+  "vm_detail": {
+    "connecting": "正在连接...",
+    "disconnected": "已断开连接",
+    "stopped_msg": "虚拟机当前处于停止状态，请先启动",
+    "configuration": "配置信息",
+    "vnc_port": "VNC 端口",
+    "ws_port": "WebSocket 端口"
   },
   "footer": {
     "powered_by": "Powered by WebVM"

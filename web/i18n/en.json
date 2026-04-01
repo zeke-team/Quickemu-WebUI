@@ -10,7 +10,9 @@
     "total_vms": "Total VMs",
     "running": "Running",
     "stopped": "Stopped",
-    "no_vms": "No VMs yet. Click the button above to create one."
+    "no_vms": "No VMs yet. Click the button above to create one.",
+    "no_vms_link": "Create one now",
+    "loading": "Loading..."
   },
   "vm": {
     "status": "Status",
@@ -35,6 +37,21 @@
     "confirm_delete": "Confirm delete VM {name}? This cannot be undone.",
     "confirm_stop": "Confirm stop VM {name}?"
   },
+  "vm_actions": {
+    "start": "Start",
+    "stop": "Stop",
+    "restart": "Restart",
+    "view": "View",
+    "delete": "Delete",
+    "confirm_delete": "Confirm delete VM {name}? This cannot be undone."
+  },
+  "vm_status": {
+    "running": "Running",
+    "stopped": "Stopped",
+    "starting": "Starting",
+    "stopping": "Stopping",
+    "error": "Error"
+  },
   "create": {
     "title": "Create VM",
     "os_type": "OS Type",
@@ -51,6 +68,14 @@
     "connecting": "Connecting...",
     "disconnected": "Disconnected",
     "reconnect": "Click to reconnect"
+  },
+  "vm_detail": {
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "stopped_msg": "VM is stopped. Start it first.",
+    "configuration": "Configuration",
+    "vnc_port": "VNC Port",
+    "ws_port": "WebSocket Port"
   },
   "footer": {
     "powered_by": "Powered by WebVM"
