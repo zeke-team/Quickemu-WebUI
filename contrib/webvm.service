@@ -1,0 +1,27 @@
+[Unit]
+Description=WebVM — Browser-based QEMU Virtual Machine Manager
+PartOf=default.target
+After=network.target
+
+[Service]
+Type=simple
+# Run as the user who installed the service — DO NOT change this to root
+ExecStart=/usr/bin/python3 -m flask --app src.app run --host 0.0.0.0 --port 5000
+WorkingDirectory=%h/projects/webvm
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+# Soft resource limits — prevents a runaway VM from consuming all memory
+MemoryMax=8G
+MemorySwapMax=2G
+
+# Harden the service
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Allow writes to ~/.webvm only
+ReadWritePaths=%h/.webvm
+
+[Install]
+WantedBy=default.target
