@@ -1,16 +1,8 @@
 """
 Background download tracker for ISO images.
 
-Provides non-blocking ISO downloads with real-time progress reporting
-by monitoring the target file size against a known total size.
-
-Architecture:
-    1. start_iso_download(os_version) → task_id
-       Spawns quickget in a subprocess and tracks the expected output path.
-
-    2. get_download_progress(task_id) → {status, progress, speed, downloaded, total}
-       Called by the frontend poll endpoint; reads current file size and
-       computes a human-readable progress snapshot.
+Provides non-blocking ISO downloads with real-time progress reporting.
+Uses directory scanning (not in-memory state) so progress survives Flask restarts.
 """
 
 from __future__ import annotations
@@ -19,12 +11,10 @@ import subprocess
 import threading
 import time
 import os
-import re
 from pathlib import Path
 from typing import Optional
 
 # Known ISO sizes (in bytes) for progress percentage calculation.
-# Sizes are approximate; a missing entry falls back to file-growth tracking.
 KNOWN_SIZES: dict[str, int] = {
     "ubuntu-24.04": 5_500_000_000,
     "ubuntu-22.04": 4_500_000_000,
@@ -42,10 +32,6 @@ KNOWN_SIZES: dict[str, int] = {
     "windows-10":    6_000_000_000,
 }
 
-# Active download tasks: task_id → dict
-_tasks: dict[str, dict] = {}
-_tasks_lock = threading.Lock()
-
 
 def _human_size(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
@@ -55,72 +41,10 @@ def _human_size(n: int) -> str:
     return f"{n:.1f} TB"
 
 
-def _monitor_file(task_id: str, file_path: Path, total_size: int, poll_interval: float = 1.0):
-    """
-    Monitor file_path growth and update the shared task dict.
-    Runs in a background thread until the file reaches total_size
-    or the task is marked cancelled/complete.
-    """
-    last_size = 0
-    last_time = time.time()
-    speed_bps = 0.0
-
-    while True:
-        time.sleep(poll_interval)
-
-        with _tasks_lock:
-            task = _tasks.get(task_id)
-            if task is None or task.get("done") or task.get("cancelled"):
-                break
-
-        if not file_path.exists():
-            continue
-
-        try:
-            current_size = file_path.stat().st_size
-        except OSError:
-            current_size = 0
-
-        now = time.time()
-        elapsed = now - last_time
-        if elapsed > 0 and current_size > last_size:
-            speed_bps = (current_size - last_size) / elapsed
-
-        progress = min(int(current_size / total_size * 100), 100) if total_size else 0
-
-        with _tasks_lock:
-            if task_id in _tasks:
-                _tasks[task_id].update(
-                    {
-                        "downloaded": current_size,
-                        "total": total_size,
-                        "progress": progress,
-                        "speed": speed_bps,
-                        "speed_human": f"{_human_size(int(speed_bps))}/s",
-                    }
-                )
-
-        last_size = current_size
-        last_time = now
-
-        if current_size >= total_size:
-            with _tasks_lock:
-                if task_id in _tasks:
-                    _tasks[task_id]["progress"] = 100
-                    _tasks[task_id]["done"] = True
-            break
-
-
 def start_iso_download(os_category: str, os_version: str, iso_path: str, cwd: str) -> str:
     """
     Start a quickget download in a background thread and return a task_id.
-
-    The subprocess runs ``quickget --download <os> <release>`` in cwd.
-    A background monitor thread tracks the growing ISO file and updates
-    progress in the shared _tasks dict.
-
-    Returns:
-        A short task_id string used to poll progress.
+    The download is identified by os_version (e.g. 'ubuntu-24.04').
     """
     from .os_catalog import quickemu_os_release
 
@@ -134,25 +58,26 @@ def start_iso_download(os_category: str, os_version: str, iso_path: str, cwd: st
     if qemu_release:
         cmd.append(qemu_release)
 
-    task_id = os_version  # simple: one active download per os_version at a time
-
-    iso_file = Path(iso_path)
+    task_id = os_version
     total_size = KNOWN_SIZES.get(os_version, 0)
+    start_time = time.time()
 
-    with _tasks_lock:
-        _tasks[task_id] = {
-            "task_id": task_id,
-            "status": "downloading",
-            "progress": 0,
-            "downloaded": 0,
-            "total": total_size,
-            "speed": 0.0,
-            "speed_human": "0 B/s",
-            "done": False,
-            "cancelled": False,
-            "iso_path": iso_path,
-            "error": None,
-        }
+    # Record start time in a marker file so we can re-detect after Flask restart
+    marker = Path(cwd) / f".download_{task_id}.start"
+
+    # Guard against duplicate downloads: if a marker already exists and curl
+    # for this ISO is still running, skip launching a second quickget.
+    if marker.exists():
+        existing_start = float(marker.read_text())
+        # Check if the download is still active (curl running with same ISO name)
+        iso_basename = Path(iso_path).name
+        running = os.popen(f"ps aux | grep '[c]url.*{iso_basename}'").read().strip()
+        if running:
+            return task_id  # already downloading, reuse existing task
+        # Stale marker from a previous crashed session — remove it
+        marker.unlink(missing_ok=True)
+
+    marker.write_text(str(start_time))
 
     def run():
         env = os.environ.copy()
@@ -164,66 +89,88 @@ def start_iso_download(os_category: str, os_version: str, iso_path: str, cwd: st
             text=True,
             env=env,
         )
-        with _tasks_lock:
-            if task_id in _tasks:
-                _tasks[task_id]["pid"] = proc.pid
-
-        # Stream output to capture potential errors
-        output_lines = []
-        for line in proc.stdout:
-            output_lines.append(line.rstrip())
-
         proc.wait()
-
-        with _tasks_lock:
-            if task_id in _tasks:
-                if proc.returncode == 0:
-                    # Scan ISO_DIR for the newest file matching this OS
-                    from .config import ISO_DIR
-                    isos = sorted(
-                        (f for f in ISO_DIR.glob("*.iso") if f.is_file()),
-                        key=lambda f: f.stat().st_mtime,
-                        reverse=True,
-                    )
-                    if isos:
-                        _tasks[task_id]["iso_path"] = str(isos[0])
-                    _tasks[task_id]["done"] = True
-                    _tasks[task_id]["status"] = "complete"
-                else:
-                    _tasks[task_id]["done"] = True
-                    _tasks[task_id]["status"] = "error"
-                    _tasks[task_id]["error"] = "\n".join(output_lines[-5:])
+        marker.unlink(missing_ok=True)
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
-
-    # Start file-size monitor if we know the total size
-    if total_size:
-        monitor = threading.Thread(
-            target=_monitor_file,
-            args=(task_id, iso_file, total_size),
-            daemon=True,
-        )
-        monitor.start()
-
     return task_id
 
 
 def get_download_progress(task_id: str) -> Optional[dict]:
-    """Return the current progress dict for a task_id, or None if not found."""
-    with _tasks_lock:
-        task = _tasks.get(task_id)
-        if not task:
+    """
+    Return the current progress for a download task.
+
+    Detects progress by:
+    1. Looking for a marker file left by start_iso_download, OR
+    2. Scanning the ISO_DIR for any recently-modified .iso file
+
+    This approach works even after Flask restarts.
+    """
+    from .config import ISO_DIR
+
+    # Try to find a start-time marker for this task
+    marker = Path(ISO_DIR) / f".download_{task_id}.start"
+    start_time: float
+    if marker.exists():
+        start_time = float(marker.read_text())
+        status = "downloading"
+    else:
+        # No marker — check if there's a recently modified .iso file
+        # that might belong to this task (within last 2 hours)
+        two_hours_ago = time.time() - 7200
+        candidates = []
+        for f in Path(ISO_DIR).glob("*.iso"):
+            if f.stat().st_mtime >= two_hours_ago:
+                candidates.append(f)
+        if candidates:
+            # Use the oldest candidate as the one we're tracking
+            start_time = min(f.stat().st_mtime for f in candidates)
+            status = "downloading"
+        else:
             return None
-        return {
-            "task_id": task["task_id"],
-            "status": task["status"],
-            "progress": task["progress"],
-            "downloaded": task["downloaded"],
-            "total": task["total"],
-            "downloaded_human": _human_size(task["downloaded"]),
-            "total_human": _human_size(task["total"]) if task["total"] else "unknown",
-            "speed_human": task["speed_human"],
-            "iso_path": task["iso_path"],
-            "error": task.get("error"),
-        }
+
+    total_size = KNOWN_SIZES.get(task_id, 0)
+
+    # Find the newest .iso file modified at or after start_time
+    isos = sorted(
+        (f for f in Path(ISO_DIR).glob("*.iso") if f.stat().st_mtime >= start_time - 1),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+
+    current_size = 0
+    actual_path = None
+    if isos:
+        actual_path = str(isos[0])
+        current_size = isos[0].stat().st_size
+
+    progress = min(int(current_size / total_size * 100), 100) if total_size else 0
+
+    # Check if curl is still running for this ISO
+    curl_running = False
+    if actual_path:
+        for line in os.popen(f"ps aux | grep curl | grep '{os.path.basename(actual_path)}' | grep -v grep"):
+            curl_running = True
+            break
+
+    if not curl_running and current_size > 0:
+        # curl finished; check if we have a complete file
+        if total_size == 0 or current_size >= total_size * 0.99:
+            status = "complete"
+            progress = 100
+        else:
+            status = "error"
+    else:
+        status = "downloading"
+
+    return {
+        "task_id": task_id,
+        "status": status,
+        "progress": progress,
+        "downloaded": current_size,
+        "total": total_size,
+        "downloaded_human": _human_size(current_size),
+        "total_human": _human_size(total_size) if total_size else "unknown",
+        "iso_path": actual_path,
+    }
