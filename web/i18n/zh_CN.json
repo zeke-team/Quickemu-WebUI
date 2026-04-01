@@ -62,7 +62,10 @@
     "creating": "创建中...",
     "linux": "Linux",
     "windows": "Windows",
-    "macos": "macOS"
+    "macos": "macOS",
+    "downloading_iso": "正在下载操作系统镜像…",
+    "download_complete": "下载完成！正在跳转…",
+    "download_failed": "下载失败："
   },
   "console": {
     "connecting": "正在连接...",

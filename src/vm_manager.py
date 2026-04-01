@@ -181,6 +181,11 @@ class VMManager:
         and stores everything in VM_DIR.  If no ISO path is provided, the OS
         image is automatically downloaded via ``quickget --download``.
 
+        The download runs asynchronously in the background and can be polled
+        via get_download_progress(). The VM config is written immediately so it
+        appears in the dashboard; its iso_path is updated in-place once the
+        download finishes.
+
         Args:
             name: Unique VM identifier.
             os_category: OS family (linux, windows, macos, other).
@@ -192,11 +197,12 @@ class VMManager:
             boot: Boot device — "cd" (from ISO) or "disk".
 
         Returns:
-            The created VM config dict.
+            A dict with the VM config plus a "download_task_id" field when
+            an ISO download was started.
 
         Raises:
             FileExistsError: If a VM with this name already exists.
-            RuntimeError: If qemu-img fails or ISO download fails.
+            RuntimeError: If qemu-img fails.
         """
         if self._vm_path(name).exists():
             raise FileExistsError(f"VM '{name}' already exists")
@@ -213,10 +219,45 @@ class VMManager:
         if result.returncode != 0:
             raise RuntimeError(f"qemu-img failed: {result.stderr}")
 
-        # Auto-download ISO if not provided
-        if not iso_path:
-            iso_path = self.download_iso(os_category, os_version)
+        # Determine ISO path: use provided path, or start background download
+        download_task_id = None
+        actual_iso_path = iso_path
 
+        if not iso_path:
+            # Write config with empty iso for now; iso_path is updated post-download
+            config = {
+                "name": name,
+                "os_category": os_category,
+                "os_version": os_version,
+                "iso": "",
+                "disk": disk,
+                "disk_size": disk_size,
+                "ram": ram,
+                "vcpu": vcpu,
+                "boot": boot,
+                "vnc_port": vnc_port,
+                "status": "stopped",
+            }
+            self._vm_path(name).write_text(json.dumps(config, indent=2))
+
+            # Start background download (updates VM config on completion)
+            from . import downloads
+            downloads.start_iso_download(
+                os_category=os_category,
+                os_version=os_version,
+                iso_path=str(ISO_DIR / f"{os_version}.iso"),
+                cwd=str(ISO_DIR),
+            )
+            download_task_id = os_version
+
+            # Return immediately with download_task_id so frontend can poll
+            return {
+                **config,
+                "iso": None,  # signal that download is in progress
+                "download_task_id": download_task_id,
+            }
+
+        # ISO provided explicitly — write config synchronously
         config = {
             "name": name,
             "os_category": os_category,

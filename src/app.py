@@ -245,6 +245,33 @@ def _register_routes(app: Flask):
         versions = all_versions(category_id)
         return jsonify([{"id": v.id, "name": v.name} for v in versions])
 
+    @app.route("/api/download/<task_id>/status", methods=["GET"])
+    def api_download_status(task_id: str):
+        """
+        Poll the progress of an active ISO download.
+        GET /api/download/<task_id>/status
+        """
+        from . import downloads
+
+        progress = downloads.get_download_progress(task_id)
+        if progress is None:
+            return jsonify({"error": "Download task not found"}), 404
+
+        # If download just completed, update the VM config's iso path
+        if progress["status"] == "complete" and progress.get("iso_path"):
+            # Find VM(s) waiting for this download (os_version == task_id)
+            for vm_path in VM_DIR.glob("*.json"):
+                try:
+                    import json
+                    cfg = json.loads(vm_path.read_text())
+                    if cfg.get("os_version") == task_id and not cfg.get("iso"):
+                        cfg["iso"] = progress["iso_path"]
+                        vm_path.write_text(json.dumps(cfg, indent=2))
+                except Exception:
+                    pass
+
+        return jsonify(progress)
+
     # ── REST API: ISO management ───────────────────────────────────────────
 
     @app.route("/api/isos", methods=["GET"])

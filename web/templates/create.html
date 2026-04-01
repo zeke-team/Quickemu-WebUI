@@ -57,9 +57,24 @@
     <div id="error-msg" class="error-msg hidden"></div>
     <div id="success-msg" class="success-msg hidden"></div>
 
-    <div class="form-actions">
+    <!-- Download progress overlay -->
+    <div id="download-overlay" class="hidden" style="margin-top: 16px; padding: 16px; background: #f0f4ff; border-radius: 8px; border: 1px solid #c0c8e8;">
+        <div id="download-title" style="font-weight: 600; margin-bottom: 8px; color: #333;">
+            {{ t("create.downloading_iso") }}
+        </div>
+        <div style="background: #e0e8ff; border-radius: 4px; height: 20px; overflow: hidden; margin-bottom: 8px;">
+            <div id="download-bar" style="background: #4f8eff; height: 100%; width: 0%; transition: width 0.4s ease; border-radius: 4px;"></div>
+        </div>
+        <div id="download-info" style="font-size: 13px; color: #555; display: flex; justify-content: space-between;">
+            <span id="download-status-text"></span>
+            <span id="download-pct">0%</span>
+        </div>
+        <div id="download-speed" style="font-size: 12px; color: #888; margin-top: 4px; text-align: right;"></div>
+    </div>
+
+    <div class="form-actions" id="form-actions">
         <a href="/" class="btn btn-secondary">{{ t("create.cancel") }}</a>
-        <button type="submit" class="btn btn-primary">{{ t("create.create_btn") }}</button>
+        <button type="submit" class="btn btn-primary" id="create-submit-btn">{{ t("create.create_btn") }}</button>
     </div>
 </form>
 {% endblock %}
@@ -126,6 +141,11 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
     const sucEl = document.getElementById("success-msg");
     errEl.classList.add("hidden");
     sucEl.classList.add("hidden");
+
+    // Disable submit button to prevent double-submit
+    const submitBtn = document.getElementById("create-submit-btn");
+    submitBtn.disabled = true;
+
     try {
         const res = await fetch("/api/vm", {
             method: "POST",
@@ -134,14 +154,68 @@ document.getElementById("create-form").addEventListener("submit", async (e) => {
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || "Failed to create VM");
+
+        // If download_task_id is returned, ISO download is in progress — show progress UI
+        if (result.download_task_id) {
+            document.getElementById("form-actions").classList.add("hidden");
+            showDownloadProgress(result.download_task_id, result.name);
+            return;
+        }
+
+        // ISO was provided or already exists — immediate success
         sucEl.textContent = `VM '${result.name}' created successfully!`;
         sucEl.classList.remove("hidden");
+        submitBtn.disabled = false;
         setTimeout(() => window.location.href = "/", 1500);
     } catch (err) {
         errEl.textContent = err.message;
         errEl.classList.remove("hidden");
+        submitBtn.disabled = false;
     }
 });
+
+async function showDownloadProgress(taskId, vmName) {
+    const overlay   = document.getElementById("download-overlay");
+    const bar       = document.getElementById("download-bar");
+    const pct       = document.getElementById("download-pct");
+    const statusTxt = document.getElementById("download-status-text");
+    const speedTxt  = document.getElementById("download-speed");
+
+    overlay.classList.remove("hidden");
+
+    const poll = setInterval(async () => {
+        try {
+            const res = await fetch(`/api/download/${encodeURIComponent(taskId)}/status`);
+            if (!res.ok) return;
+            const d = await res.json();
+
+            // Update progress bar and text
+            bar.style.width = d.progress + "%";
+            pct.textContent = d.progress + "%";
+            speedTxt.textContent = d.downloaded_human + " / " + d.total_human + "  •  " + d.speed_human;
+
+            if (d.status === "downloading") {
+                statusTxt.textContent = i18n.downloading_iso || "Downloading OS image…";
+            }
+
+            if (d.status === "complete") {
+                clearInterval(poll);
+                statusTxt.textContent = i18n.download_complete || "Download complete!";
+                bar.style.width = "100%";
+                pct.textContent = "100%";
+                speedTxt.textContent = "";
+                setTimeout(() => window.location.href = "/", 1000);
+            } else if (d.status === "error") {
+                clearInterval(poll);
+                statusTxt.textContent = i18n.download_failed || "Download failed:";
+                speedTxt.textContent = d.error || "";
+                speedTxt.style.color = "#e53e3e";
+                document.getElementById("form-actions").classList.remove("hidden");
+                document.getElementById("create-submit-btn").disabled = false;
+            }
+        } catch (_) {}
+    }, 1000);
+}
 
 loadCategories();
 </script>

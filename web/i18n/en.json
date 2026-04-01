@@ -59,10 +59,13 @@
     "vm_name": "VM Name",
     "name_placeholder": "e.g. my-linux-vm",
     "create_btn": "Create VM",
-    "creating": "Creating...",
+    "creating": "Creating…",
     "linux": "Linux",
     "windows": "Windows",
-    "macos": "macOS"
+    "macos": "macOS",
+    "downloading_iso": "Downloading OS image…",
+    "download_complete": "Download complete! Redirecting…",
+    "download_failed": "Download failed:"
   },
   "console": {
     "connecting": "Connecting...",
